@@ -177,3 +177,4 @@ models.yaml
 *.pdfs.zip.part.3
 
 otel-collector-config.yaml
+/scripts/scripts.egg-info/
