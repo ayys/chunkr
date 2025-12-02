@@ -1,6 +1,6 @@
 # Ignore Rust build artifacts
 target/
-
+core/target/
 # Ignore backup files
 **/*.rs.bk
 *.bak
