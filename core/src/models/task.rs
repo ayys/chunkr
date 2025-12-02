@@ -24,18 +24,6 @@ use tempfile::NamedTempFile;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::auth::UserInfo;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskDetails {
-    pub task_id: String,
-    pub user_info: UserInfo,
-    pub page_count: i32,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub status: String,
-}
-
 #[derive(Debug)]
 pub struct TimeoutError {
     pub message: String,
@@ -51,7 +39,6 @@ impl std::error::Error for TimeoutError {}
 
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
 pub struct Task {
-    pub api_key: Option<String>,
     pub configuration: Configuration,
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -69,14 +56,11 @@ pub struct Task {
     pub started_at: Option<DateTime<Utc>>,
     pub task_id: String,
     pub task_url: Option<String>,
-    pub user_id: String,
     pub version: Option<String>,
 }
 
 impl Task {
     pub async fn new(
-        user_id: &str,
-        api_key: Option<String>,
         configuration: &Configuration,
         file: &NamedTempFile,
         file_name: Option<String>,
@@ -91,13 +75,13 @@ impl Task {
         let client = get_pg_client().await?;
         let worker_config = worker_config::Config::from_env().unwrap();
         let task_id = Uuid::new_v4().to_string();
-        let file_name: String = file_name.unwrap_or(format!("{task_id}.{extension}").to_string());
+        let file_name: String = file_name.unwrap_or(format!("{task_id}.{extension}"));
         let file_size = file.as_file().metadata()?.len();
         let status = Status::Starting;
         let base_url = worker_config.server_url;
         let task_url = format!("{base_url}/api/v1/task/{task_id}");
         let (input_location, pdf_location, output_location, image_folder_location) =
-            Self::generate_s3_paths(user_id, &task_id, &file_name);
+            Self::generate_s3_paths(&task_id, &file_name);
         let message = "Task queued".to_string();
         let created_at = Utc::now();
         let version = worker_config.version;
@@ -109,7 +93,6 @@ impl Task {
         client
             .execute(
                 "INSERT INTO TASKS (
-                    api_key,
                     configuration,
                     created_at,
                     file_name,
@@ -124,13 +107,11 @@ impl Task {
                     status,
                     task_id,
                     task_url,
-                    user_id,
                     version
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
                 ) ON CONFLICT (task_id) DO NOTHING",
                 &[
-                    &api_key,
                     &configuration_json,
                     &created_at,
                     &file_name,
@@ -145,18 +126,16 @@ impl Task {
                     &status.to_string(),
                     &task_id,
                     &task_url,
-                    &user_id,
                     &version,
                 ],
             )
             .await?;
 
         Ok(Self {
-            api_key,
             configuration: configuration.clone(),
             created_at,
             expires_at: None,
-            file_name: Some(file_name.to_string()),
+            file_name: Some(file_name),
             file_size: file_size as i64,
             finished_at: None,
             image_folder_location,
@@ -170,17 +149,15 @@ impl Task {
             started_at: None,
             task_id: task_id.clone(),
             task_url: Some(task_url),
-            user_id: user_id.to_string(),
             version: Some(version),
         })
     }
 
-    pub async fn get(task_id: &str, user_id: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn get(task_id: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let client = get_pg_client().await?;
         let row = client
             .query_one(
                 "SELECT 
-                    api_key,
                     configuration,
                     created_at,
                     expires_at,
@@ -198,18 +175,16 @@ impl Task {
                     started_at,
                     task_id,
                     task_url,
-                    user_id,
                     version
                 FROM tasks 
-                WHERE task_id = $1 
-                AND user_id = $2",
-                &[&task_id, &user_id],
+                WHERE task_id = $1",
+                &[&task_id],
             )
             .await?;
 
         let file_name = row.get("file_name");
         let (input_location, pdf_location, output_location, image_folder_location) =
-            Self::generate_s3_paths(user_id, task_id, file_name);
+            Self::generate_s3_paths(task_id, file_name);
         let page_count: Option<i32> = row.get("page_count");
         let page_count = page_count.map(|count| count as u32);
         let config_str = row.get::<_, String>("configuration");
@@ -222,7 +197,6 @@ impl Task {
             }
         };
         Ok(Self {
-            api_key: row.get("api_key"),
             configuration,
             created_at: row.get("created_at"),
             expires_at: row.get("expires_at"),
@@ -248,7 +222,6 @@ impl Task {
             started_at: row.get("started_at"),
             task_id: row.get("task_id"),
             task_url: row.get("task_url"),
-            user_id: row.get("user_id"),
             version: row.get("version"),
         })
     }
@@ -358,8 +331,8 @@ impl Task {
         // Check if the task is in a timeout state
         let row = client
             .query_opt(
-                "SELECT message FROM tasks WHERE task_id = $1 AND user_id = $2",
-                &[&self.task_id, &self.user_id],
+                "SELECT message FROM tasks WHERE task_id = $1",
+                &[&self.task_id],
             )
             .await?;
 
@@ -413,10 +386,9 @@ impl Task {
         }
 
         let query = format!(
-            "UPDATE tasks SET {} WHERE task_id = '{}' AND user_id = '{}'",
+            "UPDATE tasks SET {} WHERE task_id = '{}'",
             update_parts.join(", "),
             self.task_id,
-            self.user_id
         );
 
         match client.execute(&query, &[]).await {
@@ -448,15 +420,14 @@ impl Task {
             return Err(format!("Task cannot be deleted: status is {}", self.status).into());
         }
         let client = get_pg_client().await?;
-        let worker_config = worker_config::Config::from_env().unwrap();
-        let bucket_name = worker_config.s3_bucket;
-        let folder_location = format!("s3://{}/{}/{}", bucket_name, self.user_id, self.task_id);
-        delete_folder(&folder_location).await?;
+        let base_folder = self
+            .image_folder_location
+            .rsplit_once('/')
+            .map(|(base, _)| base.to_string())
+            .unwrap_or_else(|| self.image_folder_location.clone());
+        delete_folder(&base_folder).await?;
         client
-            .execute(
-                "DELETE FROM tasks WHERE task_id = $1 AND user_id = $2",
-                &[&self.task_id, &self.user_id],
-            )
+            .execute("DELETE FROM tasks WHERE task_id = $1", &[&self.task_id])
             .await?;
         Ok(())
     }
@@ -468,9 +439,8 @@ impl Task {
                 "UPDATE TASKS 
              SET status = 'Cancelled', message = 'Task cancelled'
              WHERE task_id = $1 
-             AND status = 'Starting'
-             AND user_id = $2",
-                &[&self.task_id, &self.user_id],
+             AND status = 'Starting'",
+                &[&self.task_id],
             )
             .await
             .map_err(|_| "Error updating task status".to_string())?;
@@ -602,14 +572,10 @@ impl Task {
         Ok((input_file, pdf_file, page_images, segment_images, output))
     }
 
-    fn generate_s3_paths(
-        user_id: &str,
-        task_id: &str,
-        file_name: &str,
-    ) -> (String, String, String, String) {
+    fn generate_s3_paths(task_id: &str, file_name: &str) -> (String, String, String, String) {
         let worker_config = worker_config::Config::from_env().unwrap();
         let bucket_name = worker_config.s3_bucket;
-        let base_path = format!("s3://{bucket_name}/{user_id}/{task_id}");
+        let base_path = format!("s3://{bucket_name}/tasks/{task_id}");
         let path = Path::new(file_name);
         let file_stem = path
             .file_stem()
@@ -668,7 +634,6 @@ impl Task {
         previous_status: Option<Status>,
         previous_message: Option<String>,
         previous_version: Option<String>,
-        user_info: &UserInfo,
     ) -> TaskPayload {
         TaskPayload {
             previous_configuration,
@@ -676,7 +641,6 @@ impl Task {
             previous_message,
             previous_version,
             task_id: self.task_id.clone(),
-            user_info: user_info.clone(),
             trace_context: otel_config::Config::extract_context_for_propagation(),
         }
     }
@@ -725,26 +689,6 @@ pub enum Status {
     Cancelled,
 }
 
-#[cfg(feature = "azure")]
-#[derive(
-    Debug,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Clone,
-    ToSql,
-    FromSql,
-    ToSchema,
-    Display,
-    EnumString,
-    Default,
-)]
-pub enum PipelineType {
-    #[default]
-    Azure,
-    Chunkr,
-}
-
 #[derive(Debug, Serialize, Clone, ToSql, FromSql, ToSchema)]
 pub struct Configuration {
     pub chunk_processing: ChunkProcessing,
@@ -769,9 +713,6 @@ pub struct Configuration {
     #[deprecated]
     /// The target number of words in each chunk. If 0, each chunk will contain a single segment.
     pub target_chunk_length: Option<u32>,
-    #[cfg(feature = "azure")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pipeline: Option<PipelineType>,
     pub error_handling: ErrorHandlingStrategy,
     pub llm_processing: LlmProcessing,
 }
@@ -799,8 +740,6 @@ impl<'de> Deserialize<'de> for Configuration {
             #[serde(default)]
             segmentation_strategy: Option<SegmentationStrategy>,
             target_chunk_length: Option<u32>,
-            #[cfg(feature = "azure")]
-            pipeline: Option<PipelineType>,
             #[serde(default)]
             error_handling: Option<ErrorHandlingStrategy>,
             #[serde(default)]
@@ -835,8 +774,6 @@ impl<'de> Deserialize<'de> for Configuration {
                 .segmentation_strategy
                 .unwrap_or(SegmentationStrategy::default()),
             target_chunk_length: helper.target_chunk_length,
-            #[cfg(feature = "azure")]
-            pipeline: helper.pipeline,
             error_handling: helper.error_handling.unwrap_or_default(),
             llm_processing: helper.llm_processing.unwrap_or_default(),
         })
@@ -857,7 +794,6 @@ pub struct TaskPayload {
     pub previous_status: Option<Status>,
     pub previous_version: Option<String>,
     pub task_id: String,
-    pub user_info: UserInfo,
     pub trace_context: Option<String>,
 }
 

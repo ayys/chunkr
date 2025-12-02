@@ -5,15 +5,18 @@ This is holds the core of the chunkr api. The API consists of multiple services 
 ## Setup
 
 ```bash
-# Install Rust and Cargo
-curl https://sh.rustup.rs -sSf | sh
+# Install direnv + nix if you plan to use the provided flake
+curl -fsSL https://direnv.net/install.sh | bash
+curl -fsSL https://nixos.org/nix/install | sh
 
-# Source the cargo environment
-source $HOME/.cargo/env
+# Allow direnv to load the environment (provides toolchain, pdfium deps, etc.)
+cd core && direnv allow
 
 # Copy the example env file
 cp .env.example .env
 ```
+
+> The `flake.nix` pins the Rust toolchain, pdfium dependencies, and auxiliary CLI tools. If you prefer not to use Nix, ensure you install Rust (`rustup`), `libclang`, `libssl`, `libpq`, `pdftoppm`, and `libreoffice` manually.
 
 ## Running the Services
 

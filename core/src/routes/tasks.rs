@@ -1,4 +1,3 @@
-use crate::models::auth::UserInfo;
 use crate::models::task::TaskResponse;
 use crate::models::tasks::TasksQuery;
 use crate::utils::routes::get_tasks::get_tasks;
@@ -27,15 +26,9 @@ use actix_web::{web, Error, HttpResponse};
         (status = 200, description = "Detailed information describing the task", body = Vec<TaskResponse>),
         (status = 500, description = "Internal server error related to getting the task", body = String),
     ),
-    security(
-        ("api_key" = [])
-    )
 )]
-pub async fn get_tasks_route(
-    query: web::Query<TasksQuery>,
-    user_info: web::ReqData<UserInfo>,
-) -> Result<HttpResponse, Error> {
-    let tasks = match get_tasks(user_info.user_id.clone(), query.into_inner()).await {
+pub async fn get_tasks_route(query: web::Query<TasksQuery>) -> Result<HttpResponse, Error> {
+    let tasks = match get_tasks(query.into_inner()).await {
         Ok(tasks) => tasks,
         Err(e) => match e.to_string().to_lowercase().as_str() {
             "limit is required when page is provided" => {

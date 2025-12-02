@@ -1,4 +1,3 @@
-use crate::models::auth::UserInfo;
 use crate::models::task::{Configuration, Status, Task, TaskResponse};
 use crate::utils::services::payload::queue_task_payload;
 use std::error::Error;
@@ -6,7 +5,6 @@ use std::error::Error;
 pub async fn update_task(
     previous_task: &Task,
     current_configuration: &Configuration,
-    user_info: &UserInfo,
 ) -> Result<TaskResponse, Box<dyn Error>> {
     let previous_configuration = previous_task.configuration.clone();
     let previous_status = previous_task.status.clone();
@@ -36,7 +34,6 @@ pub async fn update_task(
         Some(previous_status),
         previous_message,
         previous_version,
-        user_info,
     ))
     .await?;
 

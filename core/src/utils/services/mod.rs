@@ -1,4 +1,3 @@
-pub mod azure;
 pub mod chunking;
 pub mod file_operations;
 pub mod html;
@@ -9,4 +8,3 @@ pub mod ocr;
 pub mod payload;
 pub mod pdf;
 pub mod segmentation;
-// pub mod structured_extraction;

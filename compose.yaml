@@ -33,43 +33,15 @@ services:
     volumes:
       - ./models.yaml:/app/models.yaml:ro
 
-  web:
-    build:
-      context: .
-      dockerfile: docker/web/Dockerfile
-    platform: linux/amd64
-    ports:
-      - "5173:8000"
-    env_file:
-      - .env
-    deploy:
-      replicas: 1
-    restart: always
-
-  segmentation:
-    image: nginx:latest
-    ports:
-      - "8001:8000"
-    volumes:
-      - ./nginx/segmentation.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - segmentation-backend
-    restart: always
-
   segmentation-backend:
     build:
       context: .
       dockerfile: docker/segmentation/Dockerfile
-    expose:
-      - "8000"
+    ports:
+      - "8001:8000"
     deploy:
       replicas: 6
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+
     volumes:
       - /dev/shm:/dev/shm
     environment:
@@ -79,30 +51,15 @@ services:
       - SCORE_THRESHOLD=0.2
     restart: always
 
-  ocr:
-    image: nginx:latest
-    ports:
-      - "8002:8000"
-    volumes:
-      - ./nginx/ocr.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - ocr-backend
-    restart: always
-
   ocr-backend:
     build:
       context: .
       dockerfile: docker/doctr/Dockerfile
-    expose:
-      - "8000"
+    ports:
+      - "8002:8000"
     deploy:
       replicas: 3
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+
     volumes:
       - /dev/shm:/dev/shm
     restart: always
@@ -126,14 +83,6 @@ services:
       retries: 5
     deploy:
       replicas: 1
-
-  adminer:
-    image: adminer:latest
-    ports:
-      - "8082:8080"
-    depends_on:
-      - postgres
-    restart: always
 
   redis:
     image: redis:latest
@@ -179,40 +128,7 @@ services:
         /usr/bin/mc anonymous set public myminio/chunkr
       "
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:25.0.2
-    ports:
-      - "8080:8080"
-    environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
-      - KC_PROXY=edge
-      - KC_DB=postgres
-      - KC_HOSTNAME_STRICT=false
-      - KC_HOSTNAME_STRICT_HTTPS=false
-      - KC_HTTP_ENABLED=true
-      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
-      - KC_DB_USERNAME=postgres
-      - KC_DB_PASSWORD=postgres
-      - KC_HEALTH_ENABLED=true
-      - KC_TRANSACTION_XA_ENABLED=false
-    volumes:
-      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json
-    command: [ "start-dev", "--import-realm" ]
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 600s
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
-
 volumes:
   postgres_data:
   redis_data:
   minio_data:
-
-

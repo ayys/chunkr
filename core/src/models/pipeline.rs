@@ -18,9 +18,6 @@ use memtrack::track_mem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Display, EnumString)]
 pub enum PipelineStep {
-    #[cfg(feature = "azure")]
-    #[strum(serialize = "azure_analysis")]
-    AzureAnalysis,
     #[strum(serialize = "chunking")]
     Chunking,
     #[strum(serialize = "chunkr_analysis")]
@@ -41,8 +38,6 @@ pub trait PipelineStepMessages {
 impl PipelineStepMessages for PipelineStep {
     fn start_message(&self) -> String {
         match self {
-            #[cfg(feature = "azure")]
-            PipelineStep::AzureAnalysis => "Running Azure analysis".to_string(),
             PipelineStep::Chunking => "Chunking".to_string(),
             PipelineStep::ChunkrAnalysis => "Running Chunkr analysis".to_string(),
             PipelineStep::ConvertToImages => "Converting pages to images".to_string(),
@@ -53,8 +48,6 @@ impl PipelineStepMessages for PipelineStep {
 
     fn error_message(&self) -> String {
         match self {
-            #[cfg(feature = "azure")]
-            PipelineStep::AzureAnalysis => "Failed to run Azure analysis".to_string(),
             PipelineStep::Chunking => "Failed to chunk".to_string(),
             PipelineStep::ChunkrAnalysis => "Failed to run Chunkr analysis".to_string(),
             PipelineStep::ConvertToImages => "Failed to convert pages to images".to_string(),
@@ -97,7 +90,7 @@ impl Pipeline {
     }
 
     pub async fn init(&mut self, task_payload: TaskPayload) -> Result<(), Box<dyn Error>> {
-        let mut task = Task::get(&task_payload.task_id, &task_payload.user_info.user_id).await?;
+        let mut task = Task::get(&task_payload.task_id).await?;
         task.update(
             Some(Status::Processing),
             Some("Task started".to_string()),
@@ -248,8 +241,6 @@ impl Pipeline {
 
             // Execute step
             let result = match step {
-                #[cfg(feature = "azure")]
-                PipelineStep::AzureAnalysis => crate::pipeline::azure_analysis::process(self).await,
                 PipelineStep::Chunking => crate::pipeline::chunking::process(self).await,
                 PipelineStep::ConvertToImages => {
                     crate::pipeline::convert_to_images::process(self).await

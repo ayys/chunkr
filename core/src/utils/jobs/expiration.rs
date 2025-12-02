@@ -1,16 +1,12 @@
-use crate::configs::worker_config::Config as WorkerConfig;
 use crate::utils::clients;
 use crate::utils::storage::services::delete_folder;
 use futures::future::try_join_all;
 
 pub async fn expire() -> Result<(), Box<dyn std::error::Error>> {
     let client = clients::get_pg_client().await?;
-    let worker_config = WorkerConfig::from_env()?;
-    let bucket_name = worker_config.s3_bucket;
-
     let expired_tasks = client
         .query(
-            "SELECT user_id, task_id 
+            "SELECT task_id, image_folder_location 
             FROM tasks 
             WHERE expires_at < CURRENT_TIMESTAMP 
             AND finished_at < CURRENT_TIMESTAMP 
@@ -20,9 +16,13 @@ pub async fn expire() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let deletion_futures = expired_tasks.iter().map(|row| {
-        let user_id: &str = row.get("user_id");
-        let task_id: &str = row.get("task_id");
-        let folder_location = format!("s3://{bucket_name}/{user_id}/{task_id}");
+        let image_folder: String = row
+            .get::<_, Option<String>>("image_folder_location")
+            .unwrap_or_default();
+        let folder_location = image_folder
+            .rsplit_once('/')
+            .map(|(base, _)| base.to_string())
+            .unwrap_or(image_folder.clone());
         async move {
             if let Err(e) = delete_folder(&folder_location).await {
                 println!("Error deleting S3 folder {folder_location}: {e:?}");

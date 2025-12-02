@@ -4,13 +4,11 @@ use crate::utils::clients::get_pg_client;
 use futures::future::try_join_all;
 
 pub async fn get_tasks(
-    user_id: String,
     task_query: TasksQuery,
 ) -> Result<Vec<TaskResponse>, Box<dyn std::error::Error>> {
     let client = get_pg_client().await?;
 
-    let mut conditions = vec![format!("user_id = '{}'", user_id)];
-    conditions.push("(expires_at > NOW() OR expires_at IS NULL)".to_string());
+    let mut conditions = vec!["(expires_at > NOW() OR expires_at IS NULL)".to_string()];
 
     if let Some(start) = task_query.start {
         conditions.push(format!("created_at >= '{start}'"));
@@ -41,10 +39,9 @@ pub async fn get_tasks(
         .collect::<Vec<String>>();
 
     let futures = task_ids.iter().map(|task_id| {
-        let user_id = user_id.clone();
         let task_id = task_id.clone();
         async move {
-            match Task::get(&task_id, &user_id).await {
+            match Task::get(&task_id).await {
                 Ok(task) => match task
                     .to_task_response(
                         task_query.include_chunks.unwrap_or(false),

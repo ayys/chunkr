@@ -19,21 +19,7 @@ fn orchestrate_task(
     _pipeline: &mut Pipeline,
 ) -> Result<Vec<PipelineStep>, Box<dyn std::error::Error>> {
     let mut steps = vec![PipelineStep::ConvertToImages];
-
-    #[cfg(feature = "azure")]
-    {
-        match _pipeline.get_task()?.configuration.pipeline.clone() {
-            Some(core::models::task::PipelineType::Azure) => {
-                steps.push(PipelineStep::AzureAnalysis)
-            }
-            _ => steps.push(PipelineStep::ChunkrAnalysis),
-        }
-    }
-    #[cfg(not(feature = "azure"))]
-    {
-        steps.push(PipelineStep::ChunkrAnalysis);
-    }
-
+    steps.push(PipelineStep::ChunkrAnalysis);
     steps.push(PipelineStep::Crop);
     steps.push(PipelineStep::SegmentProcessing);
     steps.push(PipelineStep::Chunking);
@@ -71,8 +57,7 @@ pub async fn process(
                 }
             }
             Err(e) => {
-                let mut task =
-                    Task::get(&task_payload.task_id, &task_payload.user_info.user_id).await?;
+                let mut task = Task::get(&task_payload.task_id).await?;
                 let message = match e.to_string().contains("LibreOffice") {
                     true => "Failed to convert file to PDF".to_string(),
                     false => "Failed to initialize task".to_string(),
@@ -178,9 +163,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             &parent_context,
                         );
                         span.set_attribute(KeyValue::new("task_id", payload.task_id.clone()));
-                        for attribute in payload.user_info.get_attributes() {
-                            span.set_attribute(attribute);
-                        }
                         let _guard = parent_context.with_span(span).attach();
                         match process(payload, config.max_retries, tracer).await {
                             Ok(_) => {
