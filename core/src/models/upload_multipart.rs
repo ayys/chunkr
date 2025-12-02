@@ -3,8 +3,6 @@ use crate::models::chunk_processing::ChunkProcessing;
 use crate::models::llm::LlmProcessing;
 use crate::models::segment_processing::SegmentProcessing;
 use crate::models::task::Configuration;
-#[cfg(feature = "azure")]
-use crate::models::task::PipelineType;
 use crate::models::upload::{ErrorHandlingStrategy, OcrStrategy, SegmentationStrategy};
 use actix_multipart::form::json::Json as MPJson;
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
@@ -32,13 +30,6 @@ pub struct CreateFormMultipart {
     #[param(style = Form, value_type = String, format = "binary")]
     #[schema(value_type = Option<OcrStrategy>, default = "All", format = "binary")]
     pub ocr_strategy: Option<MPJson<OcrStrategy>>,
-    #[cfg(feature = "azure")]
-    #[param(style = Form, value_type = String, format = "binary")]
-    #[schema(value_type = Option<PipelineType>, format = "binary")]
-    /// The PipelineType to use for processing.
-    /// If pipeline is set to Azure then Azure layout analysis will be used for segmentation and OCR.
-    /// The output will be unified to the Chunkr `output` format.
-    pub pipeline: Option<MPJson<PipelineType>>,
     #[param(style = Form, value_type = String, format = "binary")]
     #[schema(value_type = Option<SegmentProcessing>, format = "binary")]
     pub segment_processing: Option<MPJson<SegmentProcessing>>,
@@ -128,11 +119,6 @@ impl CreateFormMultipart {
             .unwrap_or_default()
     }
 
-    #[cfg(feature = "azure")]
-    fn get_pipeline(&self) -> Option<PipelineType> {
-        self.pipeline.as_ref().map(|e| e.0.clone())
-    }
-
     pub fn to_configuration(&self) -> Configuration {
         Configuration {
             chunk_processing: self.get_chunk_processing(),
@@ -142,8 +128,6 @@ impl CreateFormMultipart {
             json_schema: None,
             model: None,
             ocr_strategy: self.get_ocr_strategy(),
-            #[cfg(feature = "azure")]
-            pipeline: self.get_pipeline(),
             segment_processing: self.get_segment_processing(),
             segmentation_strategy: self.get_segmentation_strategy(),
             target_chunk_length: None,
@@ -171,13 +155,6 @@ pub struct UpdateFormMultipart {
     #[param(style = Form, value_type = Option<OcrStrategy>, format = "binary")]
     #[schema(value_type = Option<OcrStrategy>, format = "binary")]
     pub ocr_strategy: Option<MPJson<OcrStrategy>>,
-    #[cfg(feature = "azure")]
-    #[param(style = Form, value_type = Option<PipelineType>, format = "binary")]
-    #[schema(value_type = Option<PipelineType>, format = "binary")]
-    /// The pipeline to use for processing.
-    /// If pipeline is set to Azure then Azure layout analysis will be used for segmentation and OCR.
-    /// The output will be unified to the Chunkr output.
-    pub pipeline: Option<MPJson<PipelineType>>,
     #[param(style = Form, value_type = Option<SegmentProcessing>, format = "binary")]
     #[schema(value_type = Option<SegmentProcessing>, format = "binary")]
     pub segment_processing: Option<MPJson<SegmentProcessing>>,
@@ -259,8 +236,6 @@ impl UpdateFormMultipart {
                 .as_ref()
                 .map(|e| e.0.clone())
                 .unwrap_or(current_config.ocr_strategy.clone()),
-            #[cfg(feature = "azure")]
-            pipeline: self.pipeline.as_ref().map(|e| e.0.clone()),
             segment_processing: self.get_segment_processing(current_config),
             segmentation_strategy: self
                 .segmentation_strategy

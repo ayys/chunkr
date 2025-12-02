@@ -66,6 +66,12 @@ The **open-source release** is ideal if you want transparency, local hosting, or
 For **best performance, production reliability, and access to in-house models**, we recommend the <a href="https://www.chunkr.ai">Chunkr Cloud API</a>.  
 For **high-security or regulated industries**, our **Enterprise edition** offers on-prem or VPC deployments.
 
+> **Heads up:** this repository now focuses solely on the REST API and document-processing workers. The React dashboard and authentication stack have been removed to keep the footprint minimal. Interact with Chunkr through the API (`/api/v1/task`, `/api/v1/tasks`, etc.) or build your own UI on top.
+
+### Authentication & tenancy
+
+The OSS stack no longer bundles Keycloak or API-key middleware, nor the original Stripe billing endpoints. Run the API behind your own gateway/proxy if you need authentication, rate limiting, or billing. All requests execute under a single tenant (default user ID `system`, configurable via `SYSTEM_USER_ID`), so per-user accounting is no longer available.
+
 
 ## Quick Start with Docker Compose
 
@@ -102,9 +108,10 @@ docker compose -f compose.yaml -f compose.cpu.yaml up -d
 docker compose -f compose.yaml -f compose.cpu.yaml -f compose.mac.yaml up -d
 ```
 
-5. Access the services:
-   - Web UI: `http://localhost:5173`
-   - API: `http://localhost:8000`
+5. Access the services (API only):
+   - REST API: `http://localhost:8000`
+   - Segmentation worker (internal use): `http://localhost:8001`
+   - OCR worker (internal use): `http://localhost:8002`
 
 6. Stop the services when done:
 ```bash

@@ -5,4 +5,3 @@ pub mod retry;
 pub mod routes;
 pub mod services;
 pub mod storage;
-pub mod stripe;

@@ -1,6 +1,5 @@
 use crate::models::{
-    chunk_processing::TokenizerType, search::SimpleChunk, segment_processing::EmbedSource,
-    task::Configuration,
+    chunk_processing::TokenizerType, segment_processing::EmbedSource, task::Configuration,
 };
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -86,18 +85,6 @@ impl Chunk {
             .map(|s| s.count_embed_words(configuration))
             .filter_map(Result::ok)
             .sum();
-    }
-
-    /// Converts this Chunk into a SimpleChunk, containing just the ID and embed content
-    pub fn to_simple(&self) -> std::result::Result<SimpleChunk, Box<dyn Error + Send + Sync>> {
-        if self.embed.is_none() {
-            return Err("Embed is not generated".into());
-        }
-
-        Ok(SimpleChunk {
-            id: self.chunk_id.clone(),
-            content: self.embed.clone().unwrap_or_default().to_string(),
-        })
     }
 }
 
@@ -514,8 +501,6 @@ mod tests {
             target_chunk_length: None,
             error_handling: ErrorHandlingStrategy::default(),
             llm_processing: LlmProcessing::default(),
-            #[cfg(feature = "azure")]
-            pipeline: None,
         };
 
         config

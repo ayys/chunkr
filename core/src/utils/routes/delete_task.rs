@@ -1,13 +1,7 @@
 use crate::models::task::Task;
 
-pub async fn delete_task(
-    task_id: String,
-    user_id: String,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let task = match Task::get(&task_id, &user_id).await {
-        Ok(task) => task,
-        Err(_) => return Err("Task not found".into()),
-    };
+pub async fn delete_task(task_id: String) -> Result<(), Box<dyn std::error::Error>> {
+    let task = Task::get(&task_id).await.map_err(|_| "Task not found")?;
     task.delete().await?;
     Ok(())
 }

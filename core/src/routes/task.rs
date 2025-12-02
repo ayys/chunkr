@@ -1,5 +1,4 @@
 use crate::configs::otel_config;
-use crate::models::auth::UserInfo;
 use crate::models::task::{Task, TaskQuery, TaskResponse};
 use crate::models::upload;
 use crate::models::upload_multipart;
@@ -45,14 +44,10 @@ use tempfile;
         (status = 200, description = "Detailed information describing the task", body = TaskResponse),
         (status = 500, description = "Internal server error related to getting the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
 pub async fn get_task_route(
     task_id: web::Path<String>,
     task_query: web::Query<TaskQuery>,
-    user_info: web::ReqData<UserInfo>,
 ) -> Result<HttpResponse, Error> {
     let otel_config = otel_config::Config::from_env().unwrap();
     let tracer = otel_config.get_tracer(otel_config::ServiceName::Server);
@@ -62,11 +57,10 @@ pub async fn get_task_route(
     );
 
     let task_id = task_id.into_inner();
-    let user_id = user_info.user_id.clone();
 
     span.set_attribute(KeyValue::new("task_id", task_id.clone()));
 
-    match get_task(task_id, user_id, task_query.into_inner()).await {
+    match get_task(task_id, task_query.into_inner()).await {
         Ok(task_response) => {
             span.end();
             Ok(HttpResponse::Ok().json(task_response))
@@ -105,13 +99,9 @@ pub async fn get_task_route(
         (status = 200, description = "Detailed information describing the task, its status and processed outputs", body = TaskResponse),
         (status = 500, description = "Internal server error related to creating the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
 pub async fn create_task_route(
     payload: web::Json<upload::CreateForm>,
-    user_info: web::ReqData<UserInfo>,
 ) -> Result<HttpResponse, Error> {
     let otel_config = otel_config::Config::from_env().unwrap();
     let tracer = otel_config.get_tracer(otel_config::ServiceName::Server);
@@ -164,7 +154,6 @@ pub async fn create_task_route(
     let result = create_task::create_task(
         &temp_file,
         filename.or(payload.file_name.clone()),
-        &user_info,
         &configuration,
     )
     .await;
@@ -218,14 +207,10 @@ pub async fn create_task_route(
         (status = 200, description = "Detailed information describing the task, its status and processed outputs", body = TaskResponse),
         (status = 500, description = "Internal server error related to updating the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
 pub async fn update_task_route(
     payload: web::Json<upload::UpdateForm>,
     task_id: web::Path<String>,
-    user_info: web::ReqData<UserInfo>,
 ) -> Result<HttpResponse, Error> {
     let otel_config = otel_config::Config::from_env().unwrap();
     let tracer = otel_config.get_tracer(otel_config::ServiceName::Server);
@@ -235,11 +220,10 @@ pub async fn update_task_route(
     );
 
     let task_id = task_id.into_inner();
-    let user_id = user_info.user_id.clone();
 
     span.set_attribute(KeyValue::new("task_id", task_id.clone()));
 
-    let previous_task = match Task::get(&task_id, &user_id).await {
+    let previous_task = match Task::get(&task_id).await {
         Ok(task) => task,
         Err(_) => {
             span.end();
@@ -259,7 +243,7 @@ pub async fn update_task_route(
             return Ok(HttpResponse::BadRequest().body(e));
         }
     };
-    let result = update_task(&previous_task, &configuration, &user_info).await;
+    let result = update_task(&previous_task, &configuration).await;
     match result {
         Ok(task_response) => {
             span.end();
@@ -298,14 +282,8 @@ pub async fn update_task_route(
         (status = 200, description = "Task deleted successfully"),
         (status = 500, description = "Internal server error related to deleting the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
-pub async fn delete_task_route(
-    task_id: web::Path<String>,
-    user_info: web::ReqData<UserInfo>,
-) -> Result<HttpResponse, Error> {
+pub async fn delete_task_route(task_id: web::Path<String>) -> Result<HttpResponse, Error> {
     let otel_config = otel_config::Config::from_env().unwrap();
     let tracer = otel_config.get_tracer(otel_config::ServiceName::Server);
     let mut span = tracer.start_with_context(
@@ -314,11 +292,10 @@ pub async fn delete_task_route(
     );
 
     let task_id = task_id.into_inner();
-    let user_id = user_info.user_id.clone();
 
     span.set_attribute(KeyValue::new("task_id", task_id.clone()));
 
-    match delete_task(task_id, user_id).await {
+    match delete_task(task_id).await {
         Ok(_) => {
             span.end();
             Ok(HttpResponse::Ok().body("Task deleted"))
@@ -355,14 +332,8 @@ pub async fn delete_task_route(
         (status = 200, description = "Task cancelled successfully"),
         (status = 500, description = "Internal server error related to cancelling the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
-pub async fn cancel_task_route(
-    task_id: web::Path<String>,
-    user_info: web::ReqData<UserInfo>,
-) -> Result<HttpResponse, Error> {
+pub async fn cancel_task_route(task_id: web::Path<String>) -> Result<HttpResponse, Error> {
     let otel_config = otel_config::Config::from_env().unwrap();
     let tracer = otel_config.get_tracer(otel_config::ServiceName::Server);
     let mut span = tracer.start_with_context(
@@ -371,11 +342,10 @@ pub async fn cancel_task_route(
     );
 
     let task_id = task_id.into_inner();
-    let user_id = user_info.user_id.clone();
 
     span.set_attribute(KeyValue::new("task_id", task_id.clone()));
 
-    match cancel_task(&task_id, &user_id).await {
+    match cancel_task(&task_id).await {
         Ok(_) => {
             span.end();
             Ok(HttpResponse::Ok().body("Task cancelled"))
@@ -418,24 +388,16 @@ pub async fn cancel_task_route(
         (status = 200, description = "Detailed information describing the task, its status and processed outputs", body = TaskResponse),
         (status = 500, description = "Internal server error related to creating the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
 #[deprecated]
 pub async fn create_task_route_multipart(
     form: MultipartForm<upload_multipart::CreateFormMultipart>,
-    user_info: web::ReqData<UserInfo>,
 ) -> Result<HttpResponse, Error> {
     let form = &form.into_inner();
     let configuration = form.to_configuration().clone();
-    let result = create_task::create_task(
-        &form.file.file,
-        form.file.file_name.clone(),
-        &user_info,
-        &configuration,
-    )
-    .await;
+    let result =
+        create_task::create_task(&form.file.file, form.file.file_name.clone(), &configuration)
+            .await;
     match result {
         Ok(task_response) => Ok(HttpResponse::Ok().json(task_response)),
         Err(e) => {
@@ -482,25 +444,20 @@ pub async fn create_task_route_multipart(
         (status = 200, description = "Detailed information describing the task, its status and processed outputs", body = TaskResponse),
         (status = 500, description = "Internal server error related to updating the task", body = String),
     ),
-    security(
-        ("api_key" = []),
-    )
 )]
 #[deprecated]
 pub async fn update_task_route_multipart(
     form: MultipartForm<upload_multipart::UpdateFormMultipart>,
     task_id: web::Path<String>,
-    user_info: web::ReqData<UserInfo>,
 ) -> Result<HttpResponse, Error> {
     let task_id = task_id.into_inner();
-    let user_id = user_info.user_id.clone();
     let form = form.into_inner();
-    let previous_task = match Task::get(&task_id, &user_id).await {
+    let previous_task = match Task::get(&task_id).await {
         Ok(task) => task,
         Err(_) => return Err(actix_web::error::ErrorNotFound("Task not found")),
     };
     let configuration = form.to_configuration(&previous_task.configuration);
-    let result = update_task(&previous_task, &configuration, &user_info).await;
+    let result = update_task(&previous_task, &configuration).await;
     match result {
         Ok(task_response) => Ok(HttpResponse::Ok().json(task_response)),
         Err(e) => {

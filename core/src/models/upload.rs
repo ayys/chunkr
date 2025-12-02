@@ -3,8 +3,6 @@ use crate::models::chunk_processing::ChunkProcessing;
 use crate::models::llm::LlmProcessing;
 use crate::models::segment_processing::SegmentProcessing;
 use crate::models::task::Configuration;
-#[cfg(feature = "azure")]
-use crate::models::task::PipelineType;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
@@ -94,11 +92,6 @@ pub struct CreateForm {
     pub high_resolution: Option<bool>,
     #[schema(default = "All")]
     pub ocr_strategy: Option<OcrStrategy>,
-    #[cfg(feature = "azure")]
-    #[schema(default = "Azure")]
-    /// Choose the provider whose models will be used for segmentation and OCR.
-    /// The output will be unified to the Chunkr `output` format.
-    pub pipeline: Option<PipelineType>,
     pub segment_processing: Option<SegmentProcessing>,
     #[schema(default = "LayoutAnalysis")]
     pub segmentation_strategy: Option<SegmentationStrategy>,
@@ -171,11 +164,6 @@ impl CreateForm {
         self.segmentation_strategy.clone().unwrap_or_default()
     }
 
-    #[cfg(feature = "azure")]
-    fn get_pipeline(&self) -> Option<PipelineType> {
-        Some(self.pipeline.clone().unwrap_or_default())
-    }
-
     pub fn to_configuration(&self) -> Result<Configuration, String> {
         if let Some(llm_processing) = &self.llm_processing {
             let llm_config = llm_config::Config::from_env().unwrap();
@@ -189,8 +177,6 @@ impl CreateForm {
             json_schema: None,
             model: None,
             ocr_strategy: self.get_ocr_strategy(),
-            #[cfg(feature = "azure")]
-            pipeline: self.get_pipeline(),
             segment_processing: self.get_segment_processing(),
             segmentation_strategy: self.get_segmentation_strategy(),
             target_chunk_length: None,
@@ -209,10 +195,6 @@ pub struct UpdateForm {
     /// Whether to use high-resolution images for cropping and post-processing. (Latency penalty: ~7 seconds per page)
     pub high_resolution: Option<bool>,
     pub ocr_strategy: Option<OcrStrategy>,
-    #[cfg(feature = "azure")]
-    /// Choose the provider whose models will be used for segmentation and OCR.
-    /// The output will be unified to the Chunkr `output` format.
-    pub pipeline: Option<PipelineType>,
     pub segment_processing: Option<SegmentProcessing>,
     pub segmentation_strategy: Option<SegmentationStrategy>,
     pub error_handling: Option<ErrorHandlingStrategy>,
@@ -294,8 +276,6 @@ impl UpdateForm {
                 .ocr_strategy
                 .clone()
                 .unwrap_or(current_config.ocr_strategy.clone()),
-            #[cfg(feature = "azure")]
-            pipeline: current_config.pipeline.clone(),
             segment_processing: self.get_segment_processing(current_config),
             segmentation_strategy: self
                 .segmentation_strategy
